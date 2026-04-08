@@ -1,0 +1,103 @@
+## import libraries
+# numpy to load the data from the csv file and for calculation 
+import numpy as np
+# pandas to load data from file
+import pandas as pd
+# matplotlib for plotting
+import matplotlib.pyplot as plt
+# regular expression library
+import re
+
+## define a useful function to parse a range of cells
+def parse_cell_range(cell_range):
+    match = re.match(r'([A-Z]+)(\d+):([A-Z]+)(\d+)', cell_range)
+    if match:
+        col1, row1, col2, row2 = match.groups()
+        return {"start_col": col1, "start_row": int(row1), "end_col": col2, "end_row": int(row2)}
+    else:
+        raise ValueError("Invalid format. Expected format: 'A10:B12'.")
+
+## define a useful function to load data from an Excel spreadsheet
+def load_spreadsheet(file_path, sheet, data_range):
+    # Load the workbook
+    xl = pd.ExcelFile(file_path, engine='openpyxl')
+
+    # Read data from the specified ranges
+    data = {} # Initialise empty dictionary
+    for variable_name, cell_range_string in data_range.items():
+        # Parse cell start and end from string
+        cell_range_dict = parse_cell_range(cell_range_string)
+        columns   = '%s:%s' % (cell_range_dict['start_col'], cell_range_dict['end_col'])
+        n_rows    = cell_range_dict['end_row']-cell_range_dict['start_row']+1
+
+        # Read data from the specified ranges
+        data[variable_name] = pd.read_excel(xl, \
+            sheet_name=sheet, \
+            usecols=columns, \
+            skiprows=cell_range_dict['start_row']-2, \
+            nrows=n_rows).values.flatten()
+        
+        # Convert single element arrays to scalar
+        if len(data[variable_name]) == 1:
+            data[variable_name] = data[variable_name].item()
+        
+    return data
+        
+
+## load data from Excel spreadsheet
+# you may need to adjust the cell ranges if you have changed the locations of the relevant data in the template
+
+# Update this with the relative or absolute path to your completed spreadsheet
+file_path  = '2025-26_SESA1016_Lab 2 Spreadsheet Template (1).xlsx'
+
+# Load Flow and Facility Details (first sheet)
+# this function will create a dictionary with keys corresponding to the dictionary below
+# the values of the keys will correspond to values loaded from the range specified in the spreadsheet
+data_range = {'settling_chamber_width_mm'     : 'C3:C3', \
+              'settling_chamber_height_mm'    : 'C4:C4', \
+              'settling_chamber_depth_mm'     : 'C5:C5', \
+              'contraction_entrance_width_mm' : 'C6:C6', \
+              'contraction_entrance_height_mm': 'C7:C7', \
+              'test_section_width_mm'         : 'C8:C8', \
+              'test_section_height_mm'        : 'C9:C9', \
+              'large_mass_g'                  : 'C13:C13', \
+              'small_mass_g'                  : 'C14:C14', \
+              'gravity_ms'                    : 'C22:C22', \
+              'water_density_kgm3'            : 'C23:C23', \
+              'manometer_gradation_mm'        : 'C24:C24', \
+              'ambient_pressure_hPa'          : 'C27:C27', \
+              'ambient_temperature_C'         : 'C28:C28', \
+              'specific_gas_constant_JkgK'    : 'C29:C29', \
+              'kinematic_viscosity_m2s'       : 'C31:C31'}
+Facility     = load_spreadsheet(file_path, 0, data_range)
+
+print('Flow facility details')
+print(Facility)
+
+# Load Drag Measurement for First Aerofoil, first repeat
+range_foil1= {'span_mm'             : 'C2:C2', \
+              'chord_mm'            : 'C3:C3', \
+              'thickness_mm'        : 'C4:C4', \
+              'inclination_deg'     : 'C5:C5', \
+              'x1_mm'               : 'C9:C13', \
+              'x2_mm'               : 'D9:D13', \
+              'xL_mm'               : 'E9:E13', \
+              'xS_mm'               : 'F9:F13'}
+
+SmallFoil1   = load_spreadsheet(file_path, 1, range_foil1)
+print('Data for Small Aerofoil Repeat #1')
+print(SmallFoil1)
+
+# Load Drag Measurement for repeat measurement of first aerofoil
+range_foil2= {'span_mm'             : 'C2:C2', \
+              'chord_mm'            : 'C3:C3', \
+              'thickness_mm'        : 'C4:C4', \
+              'inclination_deg'     : 'C5:C5', \
+              'x1_mm'               : 'C16:C20', \
+              'x2_mm'               : 'D16:D20', \
+              'xL_mm'               : 'E16:E20', \
+              'xS_mm'               : 'F16:F20'}
+SmallFoil2    = load_spreadsheet(file_path, 1, range_foil2)
+
+print('Data for Small Aerofoil Repeat #2')
+print(SmallFoil2)
