@@ -42,8 +42,7 @@ def load_spreadsheet(file_path, sheet, data_range):
             data[variable_name] = data[variable_name].item()
         
     return data
-        
-
+##############################################################################
 ## load data from Excel spreadsheet
 # you may need to adjust the cell ranges if you have changed the locations of the relevant data in the template
 
@@ -101,3 +100,91 @@ SmallFoil2    = load_spreadsheet(file_path, 1, range_foil2)
 
 print('Data for Small Aerofoil Repeat #2')
 print(SmallFoil2)
+#####################################################################################################
+def dynamic_pressure_from_manometer(Facility, AerofoilData):
+    rho_air = (Facility['ambient_pressure_hPa'] * 100) / (Facility['specific_gas_constant_JkgK'] * (Facility['ambient_temperature_C'] + 273.15))
+    Hdiff_a = (np.asarray(AerofoilData['x2_mm'], dtype=float) - np.asarray(AerofoilData['x1_mm'], dtype=float) * 1e-3)
+    AerofoilData['dynamic_pressure_Pa'] = Facility['water_density_kgm3'] * Facility['gravity_ms'] * Hdiff_a * np.sin((2*np.pi)/9)
+    AerofoilData['dynamic_pressure_mmH2O'] = (AerofoilData['x2_mm'] - AerofoilData['x1_mm']) * np.sin((2*np.pi)/9)
+    AerofoilData['freestream_velocity_ms'] = np.sqrt(2 * AerofoilData['dynamic_pressure_Pa'] / rho_air)
+
+    return AerofoilData
+
+def drag_force_from_balance(Facility, AerofoilData):
+    g = Facility['gravity_ms']
+    large_correction = Facility['large_mass_g'] / 100
+    small_correction = Facility['small_mass_g'] / 10
+
+    AerofoilData['drag_N'] = ((AerofoilData['xL_mm'] - AerofoilData['xL_mm'][0]) * large_correction + ((AerofoilData['xS_mm']/10) - (AerofoilData['xS_mm'])))
+
+    return AerofoilData
+                              
+## define a function which will take data stored in an AerofoilData dict
+# and populate it with new fields corresponding to the drag coefficient
+# and Reynolds number
+def make_dimensionless(Facility, AerofoilData):
+    chord = AerofoilData['chord_mm'] * 1e-3
+    span = AerofoilData['span_mm'] * 1e-3
+
+    A = chord * span
+
+    AerofoilData['Re'] = (AerofoilData['freestream_velocity_ms'] * chord) / Facility['kinematic_viscosity_m2s']
+    AerofoilData['CD'] = AerofoilData['drag_N'] / (AerofoilData['dynamic_pressure_Pa'] * A)
+    return AerofoilData
+
+## Combine these operations together
+def process_aerofoil_data(Facility, AerofoilData):
+    # calculate the dynamic pressure and free-stream velocity
+    AerofoilData = dynamic_pressure_from_manometer(Facility, AerofoilData)
+    # calculate the drag force from the balance
+    AerofoilData = drag_force_from_balance(Facility, AerofoilData)
+    # find dimensionless parameters
+    AerofoilData = make_dimensionless(Facility, AerofoilData)
+    return AerofoilData
+    
+## Example usage:
+SmallFoil1 = process_aerofoil_data(Facility, SmallFoil1)
+SmallFoil2 = process_aerofoil_data(Facility, SmallFoil2)
+####################################################################################
+plt.figure(figsize=(8, 5), \
+           facecolor='white', \
+           dpi = 300)
+
+plt.errorbar(SmallFoil1['dynamic_pressure_mmH2O'][1:], \
+             SmallFoil1['drag_N'][1:], \
+             fmt = 'r+', \
+             label='Small Foil, Repeat #1')
+
+plt.errorbar(SmallFoil2['dynamic_pressure_mmH2O'][1:], \
+         SmallFoil2['drag_N'][1:], \
+         yerr=1e-3, \
+         xerr=2.0, \
+         fmt='bx', \
+         label='Small Foil, Repeat #2')
+
+pressure_mmH2O= np.concatenate((SmallFoil1['dynamic_pressure_mmH2O'][1:], SmallFoil2['dynamic_pressure_mmH2O'][1:],))
+drag_N        = np.concatenate((SmallFoil1['drag_N'][1:], SmallFoil2['drag_N'][1:]))
+
+coefs         = np.polyfit(pressure_mmH2O, drag_N, 1)
+
+print(f"SLope = {coefs[0]} N / mm")
+print(f"Intercept = {coefs[1]} N")
+
+pressure_fit  = np.array([0,120]) 
+drag_fit      = np.polyval(coefs, pressure_fit) 
+
+plt.plot(pressure_fit, drag_fit, \
+         'k-', label='Polynomial Fit')
+
+plt.xlabel('Uncalibrated Dynamic Pressure [mmH2O]', fontsize=14)
+plt.ylabel('Drag Force [N]', fontsize=14)
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+
+plt.xlim(0, 50)
+plt.ylim(0, 0.1)
+
+plt.legend(fontsize=12)
+plt.tight_layout()
+plt.show()
+#There is a problem with the plot code, something about SVD did not converge in Linear Least Squares.
